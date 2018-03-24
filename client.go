@@ -56,7 +56,7 @@ func recvtask(timeout time.Duration, wait *sync.WaitGroup, conn net.Conn, que ch
 
 	for {
 
-		err := conn.SetReadDeadline(timeout)
+		err := conn.SetReadDeadline(time.Now().Add(timeout))
 		if err != nil {
 			log.Println(err.Error())
 			return
@@ -82,10 +82,9 @@ func fullywrite(timeout time.Duration, conn net.Conn, buf []byte) error {
 
 	for {
 
-		err := conn.SetWriteDeadline(timeout)
+		err := conn.SetWriteDeadline(time.Now().Add(timeout))
 		if err != nil {
-			log.Println(err.Error())
-			return
+			return err
 		}
 
 		cnt, err := conn.Write(buf[sendcnt:])
@@ -99,7 +98,7 @@ func fullywrite(timeout time.Duration, conn net.Conn, buf []byte) error {
 	}
 }
 
-func sendtask(wait *sync.WaitGroup, conn net.Conn, que chan []byte) {
+func sendtask(timeout time.Duration, wait *sync.WaitGroup, conn net.Conn, que chan []byte) {
 	defer conn.Close()
 	defer wait.Done()
 
@@ -107,7 +106,7 @@ func sendtask(wait *sync.WaitGroup, conn net.Conn, que chan []byte) {
 
 		buf := <-que
 
-		err := fullywrite(conn, buf)
+		err := fullywrite(timeout, conn, buf)
 		if err != nil {
 			log.Println(err.Error())
 			return
@@ -134,8 +133,8 @@ func (c *Client) Run() error {
 		wait := new(sync.WaitGroup)
 		wait.Add(2)
 
-		go recvtask(wait, conn, c.recv)
-		go sendtask(wait, conn, c.send)
+		go recvtask(c.server.timeout, wait, conn, c.recv)
+		go sendtask(c.server.timeout, wait, conn, c.send)
 
 		wait.Wait()
 
@@ -147,6 +146,9 @@ func (c *Client) Run() error {
 }
 
 func (c *Client) Sub(msgid string, msg MsgBus) error {
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
 
 	return nil
 }
